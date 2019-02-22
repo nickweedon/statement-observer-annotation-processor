@@ -45,7 +45,6 @@ public class SubjectProcessor extends AbstractProcessor {
         return true;
     }
 
-
 /*
 
     public static class Example {

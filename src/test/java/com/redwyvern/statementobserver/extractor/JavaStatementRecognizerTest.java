@@ -13,24 +13,25 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class JavaStatementRecognizerTest {
 
-    private static final String SIMPLE_ASSIGNMENT_CLASS = "statementrecognizer/simpleAssignment";
-    private static final String BASIC_CLASS = "statementrecognizer/basic";
-    private static final String NESTED_CLASS = "statementrecognizer/nested";
-    private static final String SWITCH_STATEMENT_CLASS = "statementrecognizer/switchStatement";
-    private static final String MULTILINE_MULTIMETHOD_CLASS = "statementrecognizer/multiLineMultiMethod";
-    private static final String LAMBDA_INLINE_CLASS = "statementrecognizer/lambdaInline";
-    private static final String LAMBDA_MULTILINE_CLASS = "statementrecognizer/lambdaMultiline";
-    private static final String LAMBDA_MULTILINE_ASSIGNMENT_CLASS = "statementrecognizer/lambdaMultilineAssignment";
-    private static final String NESTED_IF_CLASS = "statementrecognizer/nestedIf";
+    // Test java class input
+    private static final String SIMPLE_ASSIGNMENT_CLASS = "simpleAssignment";
+    private static final String BASIC_CLASS = "basic";
+    private static final String NESTED_CLASS = "nested";
+    private static final String SWITCH_STATEMENT_CLASS = "switchStatement";
+    private static final String MULTILINE_MULTIMETHOD_CLASS = "multiLineMultiMethod";
+    private static final String LAMBDA_INLINE_CLASS = "lambdaInline";
+    private static final String LAMBDA_MULTILINE_CLASS = "lambdaMultiline";
+    private static final String LAMBDA_MULTILINE_ASSIGNMENT_CLASS = "lambdaMultilineAssignment";
+    private static final String NESTED_IF_CLASS = "nestedIf";
 
-    private static final String COMPLEX_CLASS_DEMO = "demo/complexClass";
+    private static final String COMPLEX_CLASS_DEMO = "complexClass";
 
     private static InputStream getInput(String testClassName) {
-        return ResourceUtil.getInputStream(testClassName + "Input.java");
+        return ResourceUtil.getInputStream("javaclassinput/" + testClassName + "Input.java");
     }
 
     private static InputStream getExpected(String testClassName) {
-        return ResourceUtil.getInputStream(testClassName + "Expected.java");
+        return ResourceUtil.getInputStream("statementrecognizer/" + testClassName + "Expected.java");
     }
 
     private void assertParseFile(String testClassName) {
