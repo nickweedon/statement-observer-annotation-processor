@@ -1,0 +1,30 @@
+
+
+    ///////////////////////////// Statement Observer injected code ///////////////////////
+    private java.util.concurrent.CopyOnWriteArrayList\<<statementObserver>> statementObserverList = new java.util.concurrent.CopyOnWriteArrayList\<>();
+    private Integer currentlyExecutingLine;
+    private static java.util.concurrent.atomic.AtomicReference\<<classFileCode>> classFileCode = new java.util.concurrent.atomic.AtomicReference\<>();
+
+    private void tick() {
+        currentlyExecutingLine = <subjectHelper>.getStackTraceLine(1);
+        for(<statementObserver> statementObserver : statementObserverList) {
+            statementObserver.notifyNewStatement(this);
+        }
+        currentlyExecutingLine = null;
+    }
+
+    @Override
+    public void addObserver(<statementObserver> statementObserver) {
+        statementObserverList.add(statementObserver);
+    }
+
+    @Override
+    public void removeObserver(<statementObserver> statementObserver) {
+        statementObserverList.remove(statementObserver);
+    }
+
+    @Override
+    public com.redwyvern.statementobserver.codemodel.Statement getExecutingStatement() throws java.io.IOException, ClassNotFoundException {
+        classFileCode.compareAndSet(null, <subjectHelper>.loadResourceClassFileCode(<className>.class));
+        return <subjectHelper>.getExecutingStatement(classFileCode.get(), currentlyExecutingLine);
+    }
