@@ -46,7 +46,7 @@ public class ClassFileCodeSerializationTest {
     }
 
     @Test
-    public void shouldSerializeComplexClass() throws IOException, ClassNotFoundException {
+    public void shouldSerializeComplexClass() throws IOException {
         ClassFileCode originalClassFileCode = JavaSourceExtractor.extractSource(getInput(COMPLEX_CLASS));
 
         // Quick sanity check

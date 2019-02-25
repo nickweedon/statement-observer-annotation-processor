@@ -13,6 +13,15 @@ import java.util.Scanner;
 public class ResourceUtil {
 
     public static Class<?> getClassFromJavaResourceFile(String fullQualifiedClassName, String resourcePath) {
+
+        ClassLoader classLoader = ResourceUtil.class.getClassLoader();
+
+        try {
+            return classLoader.loadClass(fullQualifiedClassName);
+        } catch (ClassNotFoundException e) {
+            // If the class was not found then fall through and compile it
+        }
+
         CachedCompiler cc = new CachedCompiler(null, null);
 
         try {

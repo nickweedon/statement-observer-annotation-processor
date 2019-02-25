@@ -9,29 +9,37 @@ import com.redwyvern.statementobserver.SubjectHelper;
 import com.redwyvern.statementobserver.codemodel.ClassFileCode;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.tree.RuleNode;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.stringtemplate.v4.ST;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.URL;
 import java.util.List;
 
 
 public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
-
     private final CommonTokenStream commonTokenStream;
 
     private String injectCode;
     private String originalClassName;
     private String generatedClassName;
+    private final OutputStream outputStream;
+    private final PrintWriter printWriter;
     public static final String IMPLEMENTS_TEMPLATE = "implements <statementSubjectInterface>";
 
+    private void output(String text) {
+        printWriter.write(text);
+        printWriter.flush();
+    }
 
-    public SubjectGeneratorVisitor(CommonTokenStream commonTokenStream) {
+    public SubjectGeneratorVisitor(CommonTokenStream commonTokenStream, OutputStream outputStream) {
         this.commonTokenStream = commonTokenStream;
+        this.outputStream = outputStream;
+        this.printWriter = new PrintWriter(outputStream);
     }
 
     private static String getResourceText(String resourceFileName) {
@@ -61,11 +69,11 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
             processLHSWhiteSpace(ctx.start.getTokenIndex());
             originalClassName = ctx.getText();
             generatedClassName = originalClassName + "Subject";
-            System.out.print(generatedClassName);
+            output(generatedClassName);
             // TODO: Make this work in all cases
             ST implementsTemplate = new ST(IMPLEMENTS_TEMPLATE);
             implementsTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
-            System.out.print(" " + implementsTemplate.render());
+            output(" " + implementsTemplate.render());
 
             return null;
         } else {
@@ -89,7 +97,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         subjectCodeTemplate.add("statementObserver", StatementObserver.class.getName());
         subjectCodeTemplate.add("classFileCode", ClassFileCode.class.getName());
 
-        System.out.print(subjectCodeTemplate.render());
+        output(subjectCodeTemplate.render());
 
         return null;
     }
@@ -100,7 +108,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         if(methodChannel != null) {
             for(Token methodText : methodChannel) {
                 String text = methodText.getText();
-                System.out.print(text);
+                output(text);
             }
         }
     }
@@ -114,10 +122,10 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
         processLHSWhiteSpace(node.getSymbol().getTokenIndex());
         if(injectCode != null) {
-            System.out.print(injectCode);
+            printWriter.print(injectCode);
             injectCode = null;
         }
-        System.out.print(node.getText());
+        output(node.getText());
 
         return super.visitTerminal(node);
     }

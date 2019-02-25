@@ -1,6 +1,7 @@
 package com.redwyvern.statementobserver;
 
 import com.redwyvern.statementobserver.codemodel.ClassFileCode;
+import com.redwyvern.util.ResourceUtil;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -14,22 +15,24 @@ public class SubjectHelperTest {
     public static final int HELLO_WORLD_METHOD_COUNT = 1;
     public static final int HELLO_WORLD_LINE_COUNT = 4;
 
-/*
     @Test
     public void shouldReturnCorrectResourcePathForClassCode() {
+
+        Class<?> helloWorldSubjectClazz = ResourceUtil.getClassFromJavaResourceFile("au.org.weedon.redblacktree.HelloWorldSubject", "subjectgenerator/HelloWorldSubject.java");
+
         assertThat(
-                SubjectHelper.getSubjectClassResourceClassFileCodePath(HelloWorldSubject.class),
+                SubjectHelper.getSubjectClassResourceClassFileCodePath(helloWorldSubjectClazz),
                 equalTo("statementobserver/au/org/weedon/redblacktree/helloWorld.ser"));
     }
 
     @Test
     public void shouldLoadResourceClassFileCode() throws IOException, ClassNotFoundException {
 
-        ClassFileCode classFileCode = SubjectHelper.loadResourceClassFileCode(HelloWorldSubject.class);
+        Class<?> helloWorldSubjectClazz = ResourceUtil.getClassFromJavaResourceFile("au.org.weedon.redblacktree.HelloWorldSubject", "subjectgenerator/HelloWorldSubject.java");
+        ClassFileCode classFileCode = SubjectHelper.loadResourceClassFileCode(helloWorldSubjectClazz);
 
         assertThat(classFileCode.getClassMethodCodeMap().size(), equalTo(HELLO_WORLD_METHOD_COUNT));
         assertThat(classFileCode.getCodeLineMap().size(), equalTo(HELLO_WORLD_LINE_COUNT));
     }
-*/
 
 }

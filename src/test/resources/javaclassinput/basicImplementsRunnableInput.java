@@ -3,11 +3,11 @@ package au.org.weedon.redblacktree;
 import com.redwyvern.statementobserver.StatementObservable;
 
 @StatementObservable
-public class HelloWorld {
+public class RunnableHelloWorld implements Runnable {
 
-    public void doStuff() {
+    @Override
+    public void run() {
         System.out.println("Hello there...");
         System.out.println("Do more stuff...");
     }
-
 }
