@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-@AutoService(Processor.class)
+//@AutoService(Processor.class)
 public class SubjectProcessor extends AbstractProcessor {
 
     Filer filer;

@@ -1,7 +1,8 @@
 package au.org.weedon.redblacktree;
 
-import java.util.*;
+import com.redwyvern.statementobserver.StatementObservable;
 
+@StatementObservable
 public class HelloWorld {
 
     private void addNode(RBNode<V> currentNode, RBNode<V> valueNode) {

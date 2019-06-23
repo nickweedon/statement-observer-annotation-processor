@@ -12,9 +12,13 @@ import java.util.Scanner;
 
 public class ResourceUtil {
 
+    //static final String STANDARD_LINE_ENDING = System.lineSeparator();
+    static final String STANDARD_LINE_ENDING = "\n";
+
     public static Class<?> getClassFromJavaResourceFile(String fullQualifiedClassName, String resourcePath) {
 
         ClassLoader classLoader = ResourceUtil.class.getClassLoader();
+
 
         try {
             return classLoader.loadClass(fullQualifiedClassName);
@@ -59,6 +63,23 @@ public class ResourceUtil {
         return getFileContents(resourceInputStream).trim();
     }
 
+    public static String normalizeLine(String inputLine) {
+        return inputLine.replaceAll("\r", "").replaceAll("\n", "") + STANDARD_LINE_ENDING;
+    }
+
+    public static String normalizeLineEndings(String inputString) {
+        StringBuilder result = new StringBuilder();
+        try (Scanner scanner = new Scanner(inputString)) {
+
+            while (scanner.hasNextLine()) {
+                String line = scanner.nextLine();
+                result.append(normalizeLine(line));
+            }
+        }
+
+        return result.toString();
+    }
+
     public static String getFileContents(InputStream resourceInputStream) {
 
         StringBuilder result = new StringBuilder();
@@ -66,7 +87,7 @@ public class ResourceUtil {
 
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
-                result.append(line).append(System.lineSeparator());
+                result.append(normalizeLine(line));
             }
         }
 
