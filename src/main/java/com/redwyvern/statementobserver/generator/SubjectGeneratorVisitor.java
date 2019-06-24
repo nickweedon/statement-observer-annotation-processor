@@ -63,6 +63,39 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         }
     }
 
+    @Override
+    public Void visitOrdinaryCompilation(Java9Parser.OrdinaryCompilationContext ctx) {
+
+        Void result = super.visitOrdinaryCompilation(ctx);
+
+        //TODO: Check that the import is not already there
+
+        // If there is no package declaration then insert the import here
+        if(getSingleChildWithRule(ctx, Java9Parser.RULE_packageDeclaration) == null) {
+            ST implementsTemplate = new ST("import <statementObservable>;");
+            implementsTemplate.add("statementObservable", com.redwyvern.statementobserver.StatementObservable.class.getName());
+            output(implementsTemplate.render());
+        }
+
+        return result;
+    }
+
+    @Override
+    public Void visitPackageDeclaration(Java9Parser.PackageDeclarationContext ctx) {
+        Void result = super.visitPackageDeclaration(ctx);
+
+        //TODO: Check that the import is not already there
+
+        // If there are not already any imports then add this as the first
+        //if(getSingleChildWithRule(ctx.getParent(), Java9Parser.RULE_importDeclaration) == null) {
+            ST implementsTemplate = new ST("\n\nimport <statementObservable>;");
+            implementsTemplate.add("statementObservable", com.redwyvern.statementobserver.StatementObservable.class.getName());
+            output(implementsTemplate.render());
+        //}
+
+        return result;
+    }
+
     private enum InterfaceAppendPointEnum {
         EXTENDS,
         IMPLEMENTS,
@@ -164,10 +197,15 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     }
 
 
+    //TODO: Add max depth
     private ParserRuleContext getSingleChildWithRule(ParserRuleContext ctx, int rule) {
 
+        if(ctx.getRuleIndex() == rule) {
+            return ctx;
+        }
+
         if(ctx.children == null || ctx.children.size() == 0) {
-            return ctx.getRuleIndex() == rule ? ctx : null;
+            return null;
         }
 
         for(ParseTree child : ctx.children) {

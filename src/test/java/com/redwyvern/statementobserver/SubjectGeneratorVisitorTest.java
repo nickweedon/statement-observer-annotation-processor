@@ -53,6 +53,8 @@ public class SubjectGeneratorVisitorTest {
     @Test
     public void shouldGenerateSubjectFromBasicInput() throws IOException {
 
+        //TODO: Fix issue where import is added even when already exists
+
         String generatedClass = executeSubjectGeneratorVisitor("javaclassinput/basicInput.java");
         String expectedGeneratedClass = ResourceUtil.getFileContents("subjectgenerator/HelloWorldSubjectHeader.java").trim();
 
