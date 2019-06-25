@@ -68,7 +68,7 @@ public class SubjectPreprocessorVisitor  extends Java9ParserBaseVisitor<Void> {
     @Override
     public Void visitNormalClassDeclaration(Java9Parser.NormalClassDeclarationContext ctx) {
 
-        // If this is a nested/inner class then skip
+        // If this is a nested/inner class then skip it
         if(parentRuleHistory.getTopParentRule(Java9Parser.RULE_normalClassDeclaration).isPresent()) {
             return super.visitNormalClassDeclaration(ctx);
         }
