@@ -3,6 +3,7 @@ package com.redwyvern.statementobserver.generator;
 import com.redwyvern.javasource.Java9Lexer;
 import com.redwyvern.javasource.Java9Parser;
 import com.redwyvern.javasource.Java9ParserBaseVisitor;
+import com.redwyvern.statementobserver.VisitorParentRuleHistory;
 import com.redwyvern.statementobserver.StatementObserver;
 import com.redwyvern.statementobserver.StatementSubject;
 import com.redwyvern.statementobserver.SubjectHelper;
@@ -30,9 +31,11 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     private String generatedClassName;
     private final OutputStream outputStream;
     private final PrintWriter printWriter;
-    private final SubjectPreprocessResult subjectPreprocessResult;
+    private final SubjectPreprocessResult preprocessResult;
+    private final VisitorParentRuleHistory parentRuleHistory = new VisitorParentRuleHistory();
 
-    private int importInsertRuleIdx = 0;
+    private int insertImportAtRuleIdx = 0;
+    private int insertImplementsAtRuleIdx = 0;
 
     private void output(String text) {
         printWriter.write(text);
@@ -45,24 +48,48 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         output(implementsTemplate.render());
     }
 
+    // Determine if/where to add import statement
+    private int calculateInsertImportRuleIdx() {
+        if(preprocessResult.getImports().contains(com.redwyvern.statementobserver.StatementObservable.class.getName())) {
+            // Don't add if it is already in the imports
+            return 0;
+        }
 
-    public SubjectGeneratorVisitor(CommonTokenStream commonTokenStream, OutputStream outputStream, SubjectPreprocessResult subjectPreprocessResult) {
+        if(preprocessResult.getImports().size() > 0) {
+            return Java9Parser.RULE_importDeclaration;
+        }
+
+        if(preprocessResult.isHasPackageDeclaration()) {
+            return Java9Parser.RULE_packageDeclaration;
+        }
+
+        return Java9Parser.RULE_ordinaryCompilation;
+    }
+
+    // Work out how we are going to add 'implements StatementSubject'
+    // We need to append the StatementSubject interface at a different point
+    // depending on whether the class already extends and/or implements.
+    private int calculateInsertImplementsRuleIdx() {
+
+        if(preprocessResult.isHasImplements()) {
+            return Java9Parser.RULE_superinterfaces;
+        }
+        if(preprocessResult.isHasExtends()) {
+            return Java9Parser.RULE_superclass;
+        }
+        return Java9Parser.RULE_identifier;
+    }
+
+
+    public SubjectGeneratorVisitor(CommonTokenStream commonTokenStream, OutputStream outputStream, SubjectPreprocessResult preprocessResult) {
         this.commonTokenStream = commonTokenStream;
         this.outputStream = outputStream;
         this.printWriter = new PrintWriter(outputStream);
-        this.subjectPreprocessResult = subjectPreprocessResult;
+        this.preprocessResult = preprocessResult;
 
-        // Determine if/where to add import statement
-        if(subjectPreprocessResult.getImports().contains(com.redwyvern.statementobserver.StatementObservable.class.getName())) {
-            // Don't add if it is already in the imports
-            importInsertRuleIdx = 0;
-        } else if(subjectPreprocessResult.getImports().size() > 0) {
-            importInsertRuleIdx = Java9Parser.RULE_importDeclaration;
-        } else if(subjectPreprocessResult.isHasPackageDeclaration()) {
-            importInsertRuleIdx = Java9Parser.RULE_packageDeclaration;
-        } else {
-            importInsertRuleIdx = Java9Parser.RULE_ordinaryCompilation;
-        }
+        // Pre-calculate various code generation aspects
+        this.insertImportAtRuleIdx = calculateInsertImportRuleIdx();
+        this.insertImplementsAtRuleIdx = calculateInsertImplementsRuleIdx();
     }
 
     private static String getResourceText(String resourceFileName) {
@@ -91,7 +118,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
         Void result = super.visitOrdinaryCompilation(ctx);
 
-        if(importInsertRuleIdx == ctx.getRuleIndex()) {
+        if(insertImportAtRuleIdx == ctx.getRuleIndex()) {
             outputTemplate("import <statementObservable>;");
         }
 
@@ -102,7 +129,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     public Void visitPackageDeclaration(Java9Parser.PackageDeclarationContext ctx) {
         Void result = super.visitPackageDeclaration(ctx);
 
-        if(importInsertRuleIdx == ctx.getRuleIndex()) {
+        if(insertImportAtRuleIdx == ctx.getRuleIndex()) {
             outputTemplate("\n\nimport <statementObservable>;");
         }
 
@@ -113,94 +140,12 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     public Void visitImportDeclaration(Java9Parser.ImportDeclarationContext ctx) {
         Void result = super.visitImportDeclaration(ctx);
 
-        if(importInsertRuleIdx == ctx.getRuleIndex() && ctx.getText().equals("import" + subjectPreprocessResult.getLastImportPackage() + ";")) {
+        if(insertImportAtRuleIdx == ctx.getRuleIndex() && ctx.getText().equals("import" + preprocessResult.getLastImportPackage() + ";")) {
             outputTemplate("\nimport <statementObservable>;");
         }
 
         return result;
     }
-
-    private enum InterfaceAppendPointEnum {
-        EXTENDS,
-        IMPLEMENTS,
-        CLASS_NAME,
-        NONE
-    }
-    private InterfaceAppendPointEnum interfaceAppendPoint;
-
-    @Override
-    public Void visitNormalClassDeclaration(Java9Parser.NormalClassDeclarationContext ctx) {
-
-        // If this is a nested/inner class then skip
-        if(getTopParentRule(Java9Parser.RULE_normalClassDeclaration).isPresent()) {
-            return super.visitNormalClassDeclaration(ctx);
-        }
-
-        // Work out how we are going to add 'implements StatementSubject'
-        // We need to append the StatementSubject interface at a different point
-        // depending on whether the class already extends and/or implements.
-
-        boolean implementsInterfaces = false;
-        boolean extendsClass = false;
-
-        for(ParseTree parseTree : ctx.children) {
-
-            if(parseTree instanceof Java9Parser.SuperclassContext) {
-                extendsClass = true;
-            }
-            if(parseTree instanceof Java9Parser.SuperinterfacesContext) {
-                implementsInterfaces = true;
-            }
-        }
-        if(implementsInterfaces) {
-            interfaceAppendPoint = InterfaceAppendPointEnum.IMPLEMENTS;
-            return super.visitNormalClassDeclaration(ctx);
-        }
-        if(extendsClass) {
-            interfaceAppendPoint = InterfaceAppendPointEnum.EXTENDS;
-            return super.visitNormalClassDeclaration(ctx);
-        }
-        interfaceAppendPoint = InterfaceAppendPointEnum.CLASS_NAME;
-
-        return super.visitNormalClassDeclaration(ctx);
-    }
-
-    private Stack<ParserRuleContext> getParentRuleStack(int rule) {
-        Stack<ParserRuleContext> parserRuleContextStack = parentRuleMap.get(rule);
-        return Objects.requireNonNullElseGet(parserRuleContextStack, Stack::new);
-    }
-
-    private Optional<ParserRuleContext> getTopParentRule(int rule) {
-        Stack<ParserRuleContext> parserRuleContextStack = parentRuleMap.get(rule);
-        if(parserRuleContextStack == null) {
-            return Optional.empty();
-        }
-        return Optional.of(parserRuleContextStack.peek());
-    }
-
-    private Optional<ParseTree> getLastChild(ParseTree parseTree) {
-        final int childCount = parseTree.getChildCount();
-        if(childCount == 0) {
-            return Optional.empty();
-        }
-        return Optional.of(parseTree.getChild(childCount - 1));
-    }
-
-
-/*
-    private ParserRuleContext getParentWithRule(ParserRuleContext ctx, int rule) {
-
-        ParserRuleContext currentCtx = ctx.getParent();
-
-        while(currentCtx.getRuleIndex() != rule) {
-            currentCtx = currentCtx.getParent();
-            if(currentCtx == null) {
-                return null;
-            }
-        }
-        return currentCtx;
-    }
-*/
 
     private ParserRuleContext getDirectSingletonChildWithRule(ParserRuleContext ctx, int rule) {
 
@@ -220,58 +165,13 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         return null;
     }
 
-
-    //TODO: Add max depth
-    private ParserRuleContext getSingleChildWithRule(ParserRuleContext ctx, int rule) {
-
-        if(ctx.getRuleIndex() == rule) {
-            return ctx;
-        }
-
-        if(ctx.children == null || ctx.children.size() == 0) {
-            return null;
-        }
-
-        for(ParseTree child : ctx.children) {
-            if(!(child instanceof ParserRuleContext)) {
-                continue;
-            }
-            ParserRuleContext childResult = getSingleChildWithRule((ParserRuleContext)child, rule);
-            if(childResult != null) {
-                return childResult;
-            }
-        }
-        return null;
-    }
-
-
-    private Map<Integer, Stack<ParserRuleContext>> parentRuleMap = new HashMap<>();
-
-
     /**
      * Override this to build a map of parent objects, keyed by rule type.
      * Maintain not a single parent but a stack in case there are multiple parents of the same type.
      */
     @Override
     public Void visitChildren(RuleNode node) {
-
-        ParserRuleContext parserRuleContext = (ParserRuleContext)node;
-
-        final int ruleIndex = parserRuleContext.getRuleContext().getRuleIndex();
-
-        parentRuleMap
-                .computeIfAbsent(ruleIndex, (index) -> new Stack<>())
-                .push(parserRuleContext);
-
-        Void result = super.visitChildren(node);
-
-        Stack<ParserRuleContext> parentRuleStack = parentRuleMap.get(ruleIndex);
-        parentRuleStack.pop();
-        if(parentRuleStack.size() == 0) {
-            parentRuleMap.remove(ruleIndex);
-        }
-
-        return result;
+        return parentRuleHistory.processRuleNode(node, super::visitChildren);
     }
 
     @Override
@@ -279,49 +179,27 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
         // If this is a non-nested/inner class then rewrite it as a subject
         if(ctx.getParent().getRuleIndex() == Java9Parser.RULE_normalClassDeclaration
-                && getParentRuleStack(Java9Parser.RULE_normalClassDeclaration).size() == 1) {
+                && parentRuleHistory.getParentRuleStack(Java9Parser.RULE_normalClassDeclaration).size() == 1) {
 
             processLHSWhiteSpace(ctx.start.getTokenIndex());
             originalClassName = ctx.getText();
             generatedClassName = originalClassName + "Subject";
             output(generatedClassName);
 
-            if(interfaceAppendPoint == InterfaceAppendPointEnum.CLASS_NAME) {
+            // Add the 'implements subject' code to the class
+            if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
                 // TODO: Make this work in all cases
                 ST implementsTemplate = new ST(" implements <statementSubjectInterface>");
                 implementsTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
                 output(implementsTemplate.render());
-                interfaceAppendPoint = InterfaceAppendPointEnum.NONE;
+                insertImplementsAtRuleIdx = 0;
             }
 
             return null;
         }
 
-
-/*
-        if(interfaceAppendPoint == InterfaceAppendPointEnum.CLASS_NAME) {
-            if(ctx.getParent().getRuleIndex() == Java9Parser.RULE_classType
-                && ctx.getParent().getParent().getRuleIndex() == Java9Parser.RULE_superclass) {
-
-            }
-        }
-*/
-
         Void result = super.visitIdentifier(ctx);
 
-        // If this is the last interface in the interface list then add the new interface
-/*
-        if(interfaceAppendPoint == InterfaceAppendPointEnum.IMPLEMENTS) {
-            getTopParentRule(Java9Parser.RULE_interfaceTypeList).ifPresent((interfaceTypeListCtx) -> {
-                if(getTopParentRule(Java9Parser.RULE_interfaceType).orElseThrow() == getLastChild(interfaceTypeListCtx).orElseThrow()) {
-                    ST implementsTemplate = new ST(", <statementSubjectInterface>");
-                    implementsTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
-                    output(implementsTemplate.render());
-                }
-
-            });
-        }
-*/
 
         return result;
 
@@ -331,11 +209,12 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     public Void visitSuperinterfaces(Java9Parser.SuperinterfacesContext ctx) {
         Void result = super.visitSuperinterfaces(ctx);
 
-        if(interfaceAppendPoint == InterfaceAppendPointEnum.IMPLEMENTS) {
+        // Append the subject interface to the implements list
+        if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
             ST implementsTemplate = new ST(", <statementSubjectInterface>");
             implementsTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
             output(implementsTemplate.render());
-            interfaceAppendPoint = InterfaceAppendPointEnum.NONE;
+            insertImplementsAtRuleIdx = 0;
         }
 
         return result;
@@ -344,11 +223,12 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     @Override
     public Void visitSuperclass(Java9Parser.SuperclassContext ctx) {
         Void result = super.visitSuperclass(ctx);
-        if(interfaceAppendPoint == InterfaceAppendPointEnum.EXTENDS) {
+        // Add the 'implements subject' code to the class but after the 'extends' clause
+        if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
             ST implementsTemplate = new ST(" implements <statementSubjectInterface>");
             implementsTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
             output(implementsTemplate.render());
-            interfaceAppendPoint = InterfaceAppendPointEnum.NONE;
+            insertImplementsAtRuleIdx = 0;
         }
 
         return result;

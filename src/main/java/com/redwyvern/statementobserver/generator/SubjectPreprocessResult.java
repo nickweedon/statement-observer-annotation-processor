@@ -13,5 +13,7 @@ public class SubjectPreprocessResult {
 
     private Set<String> imports = new HashSet<>();
     private boolean hasPackageDeclaration;
+    private boolean hasImplements;
+    private boolean hasExtends;
     private String lastImportPackage;
 }
