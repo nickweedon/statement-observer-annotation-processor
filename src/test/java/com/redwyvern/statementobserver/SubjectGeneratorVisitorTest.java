@@ -3,6 +3,8 @@ package com.redwyvern.statementobserver;
 import com.redwyvern.javasource.Java9Lexer;
 import com.redwyvern.javasource.Java9Parser;
 import com.redwyvern.statementobserver.generator.SubjectGeneratorVisitor;
+import com.redwyvern.statementobserver.generator.SubjectPreprocessorVisitor;
+import com.redwyvern.statementobserver.generator.SubjectPreprocessResult;
 import com.redwyvern.util.ResourceUtil;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -18,7 +20,6 @@ import java.io.InputStream;
 
 import static org.hamcrest.CoreMatchers.startsWith;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
 
 
 public class SubjectGeneratorVisitorTest {
@@ -40,11 +41,21 @@ public class SubjectGeneratorVisitorTest {
         }
     }
 
+    private SubjectPreprocessResult executeSubjectPreprocessorVisitor(String inputResource) throws IOException {
+        ParseInput parseInput = ParseInput.fromResource(inputResource);
+        Java9Parser java9Parser = new Java9Parser(parseInput.getCommonTokenStream());
+        SubjectPreprocessorVisitor subjectPreprocessorVisitor = new SubjectPreprocessorVisitor(java9Parser);
+        subjectPreprocessorVisitor.visit(parseInput.getParseTreeRoot());
+        return subjectPreprocessorVisitor.getResult();
+    }
+
 
     private String executeSubjectGeneratorVisitor(String inputResource) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
         ParseInput parseInput = ParseInput.fromResource(inputResource);
-        SubjectGeneratorVisitor subjectGeneratorVisitor = new SubjectGeneratorVisitor(parseInput.getCommonTokenStream(), outputStream);
+        SubjectPreprocessResult subjectPreprocessResult = executeSubjectPreprocessorVisitor(inputResource);
+        SubjectGeneratorVisitor subjectGeneratorVisitor = new SubjectGeneratorVisitor(parseInput.getCommonTokenStream(), outputStream, subjectPreprocessResult);
         subjectGeneratorVisitor.visit(parseInput.getParseTreeRoot());
 
         return ResourceUtil.normalizeLineEndings(new String(outputStream.toByteArray()));

@@ -30,16 +30,39 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     private String generatedClassName;
     private final OutputStream outputStream;
     private final PrintWriter printWriter;
+    private final SubjectPreprocessResult subjectPreprocessResult;
+
+    private int importInsertRuleIdx = 0;
 
     private void output(String text) {
         printWriter.write(text);
         printWriter.flush();
     }
 
-    public SubjectGeneratorVisitor(CommonTokenStream commonTokenStream, OutputStream outputStream) {
+    private void outputTemplate(String template) {
+        ST implementsTemplate = new ST(template);
+        implementsTemplate.add("statementObservable", com.redwyvern.statementobserver.StatementObservable.class.getName());
+        output(implementsTemplate.render());
+    }
+
+
+    public SubjectGeneratorVisitor(CommonTokenStream commonTokenStream, OutputStream outputStream, SubjectPreprocessResult subjectPreprocessResult) {
         this.commonTokenStream = commonTokenStream;
         this.outputStream = outputStream;
         this.printWriter = new PrintWriter(outputStream);
+        this.subjectPreprocessResult = subjectPreprocessResult;
+
+        // Determine if/where to add import statement
+        if(subjectPreprocessResult.getImports().contains(com.redwyvern.statementobserver.StatementObservable.class.getName())) {
+            // Don't add if it is already in the imports
+            importInsertRuleIdx = 0;
+        } else if(subjectPreprocessResult.getImports().size() > 0) {
+            importInsertRuleIdx = Java9Parser.RULE_importDeclaration;
+        } else if(subjectPreprocessResult.isHasPackageDeclaration()) {
+            importInsertRuleIdx = Java9Parser.RULE_packageDeclaration;
+        } else {
+            importInsertRuleIdx = Java9Parser.RULE_ordinaryCompilation;
+        }
     }
 
     private static String getResourceText(String resourceFileName) {
@@ -68,13 +91,8 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
         Void result = super.visitOrdinaryCompilation(ctx);
 
-        //TODO: Check that the import is not already there
-
-        // If there is no package declaration then insert the import here
-        if(getSingleChildWithRule(ctx, Java9Parser.RULE_packageDeclaration) == null) {
-            ST implementsTemplate = new ST("import <statementObservable>;");
-            implementsTemplate.add("statementObservable", com.redwyvern.statementobserver.StatementObservable.class.getName());
-            output(implementsTemplate.render());
+        if(importInsertRuleIdx == ctx.getRuleIndex()) {
+            outputTemplate("import <statementObservable>;");
         }
 
         return result;
@@ -84,14 +102,20 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     public Void visitPackageDeclaration(Java9Parser.PackageDeclarationContext ctx) {
         Void result = super.visitPackageDeclaration(ctx);
 
-        //TODO: Check that the import is not already there
+        if(importInsertRuleIdx == ctx.getRuleIndex()) {
+            outputTemplate("\n\nimport <statementObservable>;");
+        }
 
-        // If there are not already any imports then add this as the first
-        //if(getSingleChildWithRule(ctx.getParent(), Java9Parser.RULE_importDeclaration) == null) {
-            ST implementsTemplate = new ST("\n\nimport <statementObservable>;");
-            implementsTemplate.add("statementObservable", com.redwyvern.statementobserver.StatementObservable.class.getName());
-            output(implementsTemplate.render());
-        //}
+        return result;
+    }
+
+    @Override
+    public Void visitImportDeclaration(Java9Parser.ImportDeclarationContext ctx) {
+        Void result = super.visitImportDeclaration(ctx);
+
+        if(importInsertRuleIdx == ctx.getRuleIndex() && ctx.getText().equals("import" + subjectPreprocessResult.getLastImportPackage() + ";")) {
+            outputTemplate("\nimport <statementObservable>;");
+        }
 
         return result;
     }
