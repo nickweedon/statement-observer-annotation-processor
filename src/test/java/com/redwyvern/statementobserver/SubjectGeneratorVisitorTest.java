@@ -53,9 +53,11 @@ public class SubjectGeneratorVisitorTest {
     private String executeSubjectGeneratorVisitor(String inputResource) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
+        Java9Parser parser = new Java9Parser(ParseInput.fromResource(inputResource).getCommonTokenStream());
+
         ParseInput parseInput = ParseInput.fromResource(inputResource);
         SubjectPreprocessResult subjectPreprocessResult = executeSubjectPreprocessorVisitor(inputResource);
-        SubjectGeneratorVisitor subjectGeneratorVisitor = new SubjectGeneratorVisitor(parseInput.getCommonTokenStream(), outputStream, subjectPreprocessResult);
+        SubjectGeneratorVisitor subjectGeneratorVisitor = new SubjectGeneratorVisitor(parseInput.getCommonTokenStream(), parser, outputStream, subjectPreprocessResult);
         subjectGeneratorVisitor.visit(parseInput.getParseTreeRoot());
 
         return ResourceUtil.normalizeLineEndings(new String(outputStream.toByteArray()));
@@ -77,7 +79,6 @@ public class SubjectGeneratorVisitorTest {
 
         String generatedClass = executeSubjectGeneratorVisitor("javaclassinput/basicImplementsRunnableInput.java");
         String expectedGeneratedClass = ResourceUtil.getFileContents("subjectgenerator/HelloWorldImplementsRunnableSubjectHeader.java").trim();
-
 
         assertThat(generatedClass, startsWith(expectedGeneratedClass));
     }
@@ -140,6 +141,15 @@ public class SubjectGeneratorVisitorTest {
 
         String generatedClass = executeSubjectGeneratorVisitor("javaclassinput/nestedIfInput.java");
         String expectedGeneratedClass = ResourceUtil.getFileContents("subjectgenerator/HelloWorldSubjectNestedIfTick.java").trim();
+
+        assertThat(generatedClass, startsWith(expectedGeneratedClass));
+    }
+
+    @Test
+    public void shouldGenerateEnclosingBlockAndTickFromNestedIfWithoutBlock() throws IOException {
+
+        String generatedClass = executeSubjectGeneratorVisitor("javaclassinput/nestedIfWithoutBlockInput.java");
+        String expectedGeneratedClass = ResourceUtil.getFileContents("subjectgenerator/HelloWorldSubjectNestedIfTickWithoutBlock.java").trim();
 
         assertThat(generatedClass, startsWith(expectedGeneratedClass));
     }

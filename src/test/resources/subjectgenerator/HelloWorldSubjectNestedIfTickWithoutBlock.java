@@ -1,0 +1,21 @@
+package au.org.weedon.redblacktree;
+
+import com.redwyvern.statementobserver.StatementObservable;
+
+@StatementObservable
+public class HelloWorldSubject implements com.redwyvern.statementobserver.StatementSubject {
+
+    private void addNode(RBNode<V> currentNode, RBNode<V> valueNode) {
+
+        tick(); if(compareNodes(valueNode.getValue(), currentNode.getValue()) > 0) {
+            tick(); if(currentNode.getLeft().isNil())
+            { tick(); currentNode.setLeft(valueNode); }
+            else
+            { tick(); addNode(currentNode.getLeft(), valueNode); }
+        } else {
+            tick(); if(currentNode.getRight().isNil())
+            { tick(); currentNode.setRight(valueNode); }
+            else
+            { tick(); addNode(currentNode.getRight(), valueNode); }
+        }
+    }

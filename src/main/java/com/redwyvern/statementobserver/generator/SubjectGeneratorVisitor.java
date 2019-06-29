@@ -8,44 +8,105 @@ import com.redwyvern.statementobserver.StatementObserver;
 import com.redwyvern.statementobserver.StatementSubject;
 import com.redwyvern.statementobserver.SubjectHelper;
 import com.redwyvern.statementobserver.codemodel.ClassFileCode;
+import lombok.Getter;
+import lombok.Setter;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.RuleNode;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.antlr.v4.runtime.tree.xpath.XPath;
 import org.stringtemplate.v4.ST;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.URL;
 import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
     private final CommonTokenStream commonTokenStream;
+    private final Java9Parser parser;
 
-    private String injectCode;
+    private static final Function<String, String> IDENTITY_RULE_TRANSFORM = (rule) -> rule;
     private String originalClassName;
     private String generatedClassName;
-    private final OutputStream outputStream;
+    private OutputStream originalOutputStream;
+    private OutputStream outputStream;
     private final PrintWriter printWriter;
     private final SubjectPreprocessResult preprocessResult;
     private final VisitorParentRuleHistory parentRuleHistory = new VisitorParentRuleHistory();
+
+    @Getter
+    @Setter
+    static private class RuleTransform {
+        private String lhsWhitespace;
+        private final Function<String, String> ruleTransform;
+        private final ByteArrayOutputStream ruleOutputStream = new ByteArrayOutputStream();
+
+        private RuleTransform(Function<String, String> ruleTransform) {
+            this.ruleTransform = ruleTransform;
+        }
+
+        public String getTransformedString() {
+            return ruleTransform.apply(ruleOutputStream.toString());
+        }
+    }
+
+    private final Stack<RuleTransform> ruleTransformStack = new Stack<>();
 
     private int insertImportAtRuleIdx = 0;
     private int insertImplementsAtRuleIdx = 0;
 
     private void output(String text) {
-        printWriter.write(text);
-        printWriter.flush();
+        try {
+            outputStream.write(text.getBytes());
+            outputStream.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        //printWriter.write(text);
+        //printWriter.flush();
+    }
+
+    private <T extends ParserRuleContext> Void setRuleTransform(Function<T, Void> superMethod, T ctx, Function<String, String> transform) {
+        RuleTransform ruleTransform = new RuleTransform(transform);
+        outputStream = ruleTransform.getRuleOutputStream();
+        ruleTransformStack.push(ruleTransform);
+        Void result = superMethod.apply(ctx);
+
+        if(ruleTransformStack.pop() != ruleTransform) {
+            throw new RuntimeException("Rule transform stack corruption!");
+        }
+
+        if(ruleTransformStack.size() > 0) {
+            outputStream = ruleTransformStack.peek().getRuleOutputStream();
+        } else {
+            outputStream = originalOutputStream;
+        }
+        try {
+            String streamText = ruleTransform.getTransformedString();
+            outputStream.write(streamText.getBytes());
+            outputStream.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return result;
     }
 
     private void outputTemplate(String template) {
-        ST implementsTemplate = new ST(template);
-        implementsTemplate.add("statementObservable", com.redwyvern.statementobserver.StatementObservable.class.getName());
-        output(implementsTemplate.render());
+        ST outputTemplate = new ST(template);
+        outputTemplate.add("className", generatedClassName);
+        outputTemplate.add("subjectHelper", SubjectHelper.class.getName());
+        outputTemplate.add("statementObserver", StatementObserver.class.getName());
+        outputTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
+        outputTemplate.add("classFileCode", ClassFileCode.class.getName());
+        outputTemplate.add("statementObservable", com.redwyvern.statementobserver.StatementObservable.class.getName());
+        output(outputTemplate.render());
     }
 
     // Determine if/where to add import statement
@@ -81,8 +142,10 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     }
 
 
-    public SubjectGeneratorVisitor(CommonTokenStream commonTokenStream, OutputStream outputStream, SubjectPreprocessResult preprocessResult) {
+    public SubjectGeneratorVisitor(CommonTokenStream commonTokenStream, Java9Parser parser, OutputStream outputStream, SubjectPreprocessResult preprocessResult) {
         this.commonTokenStream = commonTokenStream;
+        this.parser = parser;
+        this.originalOutputStream = outputStream;
         this.outputStream = outputStream;
         this.printWriter = new PrintWriter(outputStream);
         this.preprocessResult = preprocessResult;
@@ -183,15 +246,13 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
             processLHSWhiteSpace(ctx.start.getTokenIndex());
             originalClassName = ctx.getText();
-            generatedClassName = originalClassName + "Subject";
+            generatedClassName = " " + originalClassName + "Subject";
             output(generatedClassName);
 
             // Add the 'implements subject' code to the class
             if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
                 // TODO: Make this work in all cases
-                ST implementsTemplate = new ST(" implements <statementSubjectInterface>");
-                implementsTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
-                output(implementsTemplate.render());
+                outputTemplate(" implements <statementSubjectInterface>");
                 insertImplementsAtRuleIdx = 0;
             }
 
@@ -211,9 +272,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
         // Append the subject interface to the implements list
         if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
-            ST implementsTemplate = new ST(", <statementSubjectInterface>");
-            implementsTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
-            output(implementsTemplate.render());
+            outputTemplate(", <statementSubjectInterface>");
             insertImplementsAtRuleIdx = 0;
         }
 
@@ -225,23 +284,39 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         Void result = super.visitSuperclass(ctx);
         // Add the 'implements subject' code to the class but after the 'extends' clause
         if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
-            ST implementsTemplate = new ST(" implements <statementSubjectInterface>");
-            implementsTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
-            output(implementsTemplate.render());
+            outputTemplate(" implements <statementSubjectInterface>");
             insertImplementsAtRuleIdx = 0;
         }
 
         return result;
     }
 
+    private Pattern lhsWhitespaceSplitPattern = Pattern.compile("(^\\s*)(.*)", Pattern.DOTALL);
+
+    private String lhsWhitespaceSplitTransform(String token, BiFunction<String, String, String> splitTransform) {
+        Matcher matcher = lhsWhitespaceSplitPattern.matcher(token);
+        if(matcher.matches()) {
+            return splitTransform.apply(matcher.group(1), matcher.group(2));
+        }
+        return splitTransform.apply("", token);
+    }
+
     @Override
     public Void visitStatement(Java9Parser.StatementContext ctx) {
 
-        // Skip pre-pending tick if this is the start of a block
-        if(getDirectSingletonChildWithRule(ctx, Java9Parser.RULE_block) != null) {
-            return super.visitStatement(ctx);
+        // We need to enclose this single statement in block quotes to insert the tick()
+        if(ctx.getParent().getRuleIndex() == Java9Parser.RULE_ifThenElseStatement) {
+            return setRuleTransform(super::visitStatement, ctx,
+                    (token) -> lhsWhitespaceSplitTransform(token,
+                            (lhsWS, rhsToken) -> lhsWS + "{ tick(); " + rhsToken + "}"));
         }
-        injectCode = "tick(); ";
+
+        // Skip pre-pending tick if this is before the start of a block
+        if(XPath.findAll(ctx, "/statement/statementWithoutTrailingSubstatement/block", parser).size() == 0) {
+            return setRuleTransform(super::visitStatement, ctx,
+                    (token) -> lhsWhitespaceSplitTransform(token,
+                            (lhsWS, rhsToken) -> lhsWS + "tick(); " + rhsToken));
+        }
         return super.visitStatement(ctx);
     }
 
@@ -249,26 +324,32 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     public Void visitClassBodyDeclaration(Java9Parser.ClassBodyDeclarationContext ctx) {
         super.visitClassBodyDeclaration(ctx);
 
-        ST subjectCodeTemplate = new ST(getResourceText("generator/SubjectDeclTemplate.tmpl"));
-        subjectCodeTemplate.add("className", generatedClassName);
-        subjectCodeTemplate.add("subjectHelper", SubjectHelper.class.getName());
-        subjectCodeTemplate.add("statementObserver", StatementObserver.class.getName());
-        subjectCodeTemplate.add("classFileCode", ClassFileCode.class.getName());
-
-        output(subjectCodeTemplate.render());
+        outputTemplate(getResourceText("generator/SubjectDeclTemplate.tmpl"));
 
         return null;
     }
 
-    private void processLHSWhiteSpace(int tokenIndex) {
+    private String processLHSWhiteSpace(int tokenIndex) {
+
+        StringBuilder whiteSpaceString = new StringBuilder();
+
         List<Token> methodChannel = commonTokenStream.getHiddenTokensToLeft(tokenIndex, Java9Lexer.WHITE_SPACE);
 
         if(methodChannel != null) {
             for(Token methodText : methodChannel) {
                 String text = methodText.getText();
-                output(text);
+                whiteSpaceString.append(text);
             }
         }
+
+        return whiteSpaceString.toString();
+    }
+
+    @Override
+    public Void visit(ParseTree tree) {
+        Void result = super.visit(tree);
+
+        return result;
     }
 
     @Override
@@ -278,13 +359,10 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
             return null;
         }
 
-        processLHSWhiteSpace(node.getSymbol().getTokenIndex());
-        if(injectCode != null) {
-            printWriter.print(injectCode);
-            injectCode = null;
-        }
-        output(node.getText());
+        output(processLHSWhiteSpace(node.getSymbol().getTokenIndex()) + node.getText());
 
         return super.visitTerminal(node);
     }
+
+
 }
