@@ -9,13 +9,13 @@ public class HelloWorldSubject implements com.redwyvern.statementobserver.Statem
 
         tick(); if(compareNodes(valueNode.getValue(), currentNode.getValue()) > 0) {
             tick(); if(currentNode.getLeft().isNil())
-            { tick(); currentNode.setLeft(valueNode); }
+                { tick(); currentNode.setLeft(valueNode); }
             else
-            { tick(); addNode(currentNode.getLeft(), valueNode); }
+                { tick(); addNode(currentNode.getLeft(), valueNode); }
         } else {
             tick(); if(currentNode.getRight().isNil())
-            { tick(); currentNode.setRight(valueNode); }
+                { tick(); currentNode.setRight(valueNode); }
             else
-            { tick(); addNode(currentNode.getRight(), valueNode); }
+                { tick(); addNode(currentNode.getRight(), valueNode); }
         }
     }

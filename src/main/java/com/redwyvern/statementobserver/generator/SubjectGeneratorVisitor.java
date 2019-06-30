@@ -1,5 +1,6 @@
 package com.redwyvern.statementobserver.generator;
 
+import com.google.common.collect.Lists;
 import com.redwyvern.javasource.Java9Lexer;
 import com.redwyvern.javasource.Java9Parser;
 import com.redwyvern.javasource.Java9ParserBaseVisitor;
@@ -301,32 +302,92 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         return splitTransform.apply("", token);
     }
 
+    private boolean isStatementBlock(ParseTree ctx) {
+        return XPath.findAll(ctx, "/*/statementWithoutTrailingSubstatement/block", parser).size() == 1;
+    }
+
+    // Process the 'then' portion of if-then-else when it is not enclosed in a statement block
+    @Override
+    public Void visitStatementNoShortIf(Java9Parser.StatementNoShortIfContext ctx) {
+        if(isStatementBlock(ctx)) {
+            return super.visitStatementNoShortIf(ctx);
+        }
+
+        if(ctx.getParent().getRuleIndex() == Java9Parser.RULE_ifThenElseStatement) {
+            return setRuleTransform(super::visitStatementNoShortIf, ctx,
+                    (token) -> lhsWhitespaceSplitTransform(token,
+                            (lhsWS, rhsToken) -> lhsWS + "{ tick(); " + rhsToken + " }"));
+        }
+
+        return super.visitStatementNoShortIf(ctx);
+    }
+
+    // Prefix the actual 'if' statement and the 'else' part of the if-then-else. Add enclosing block
+    // when else statement is not a statement block.
     @Override
     public Void visitStatement(Java9Parser.StatementContext ctx) {
+
+        // This prevents placing a 'tick()' in front of a statement block
+        // For example we don't want: 'if (true) { stuff...} else tick() { stuff... }
+        if(isStatementBlock(ctx)) {
+            return super.visitStatement(ctx);
+        }
 
         // We need to enclose this single statement in block quotes to insert the tick()
         if(ctx.getParent().getRuleIndex() == Java9Parser.RULE_ifThenElseStatement) {
             return setRuleTransform(super::visitStatement, ctx,
                     (token) -> lhsWhitespaceSplitTransform(token,
-                            (lhsWS, rhsToken) -> lhsWS + "{ tick(); " + rhsToken + "}"));
+                            (lhsWS, rhsToken) -> lhsWS + "{ tick(); " + rhsToken + " }"));
         }
 
         // Skip pre-pending tick if this is before the start of a block
-        if(XPath.findAll(ctx, "/statement/statementWithoutTrailingSubstatement/block", parser).size() == 0) {
-            return setRuleTransform(super::visitStatement, ctx,
-                    (token) -> lhsWhitespaceSplitTransform(token,
-                            (lhsWS, rhsToken) -> lhsWS + "tick(); " + rhsToken));
-        }
-        return super.visitStatement(ctx);
+        return setRuleTransform(super::visitStatement, ctx,
+                (token) -> lhsWhitespaceSplitTransform(token,
+                        (lhsWS, rhsToken) -> lhsWS + "tick(); " + rhsToken));
+
     }
+
+    private List<ParseTree> getRightParseTreeArray(ParseTree ctx) {
+        List<ParseTree> parseTreeList = new ArrayList<>();
+
+        final ParseTree parent = ctx.getParent();
+
+        for(int i = parent.getChildCount() - 1; i >= 0 && parent.getChild(i) != ctx; --i) {
+            parseTreeList.add(parent.getChild(i));
+        }
+        return Lists.reverse(parseTreeList);
+    }
+
+    private List<ParseTree> getLeftParseTreeArray(ParseTree ctx) {
+        List<ParseTree> parseTreeList = new ArrayList<>();
+
+        final ParseTree parent = ctx.getParent();
+
+        for(int i = 0; i < parent.getChildCount() && parent.getChild(i) != ctx; ++i) {
+            parseTreeList.add(parent.getChild(i));
+        }
+        return  parseTreeList;
+    }
+
 
     @Override
     public Void visitClassBodyDeclaration(Java9Parser.ClassBodyDeclarationContext ctx) {
-        super.visitClassBodyDeclaration(ctx);
+
+        Void result = super.visitClassBodyDeclaration(ctx);
+
+        if(parentRuleHistory.getParentRuleStack(Java9Parser.RULE_classBody).size() != 1) {
+            return result;
+        }
+
+        List<ParseTree> rightParseTreeList = getRightParseTreeArray(ctx);
+
+        if(rightParseTreeList.size() != 1 || !rightParseTreeList.get(0).getText().equals("}")) {
+            return result;
+        }
 
         outputTemplate(getResourceText("generator/SubjectDeclTemplate.tmpl"));
 
-        return null;
+        return result;
     }
 
     private String processLHSWhiteSpace(int tokenIndex) {

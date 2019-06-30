@@ -164,6 +164,16 @@ public class SubjectGeneratorVisitorTest {
         assertThat(generatedClass, startsWith(expectedGeneratedClass));
     }
 
+    @Test
+    public void shouldGenerateTickFromLamdaInline() throws IOException {
+
+
+        String generatedClass = executeSubjectGeneratorVisitor("javaclassinput/lambdaInlineInput.java").trim();
+        String expectedGeneratedClass = ResourceUtil.getFileContents("subjectgenerator/SubjectLambdaInlineTick.java").trim();
+
+        assertThat(generatedClass, startsWith(expectedGeneratedClass));
+    }
+
     //TODO: Implement more of the 'tick()' tests to finish fleshing out this functionality
 
 
