@@ -15,5 +15,4 @@ public class SubjectPreprocessResult {
     private boolean hasPackageDeclaration;
     private boolean hasImplements;
     private boolean hasExtends;
-    private String lastImportPackage;
 }

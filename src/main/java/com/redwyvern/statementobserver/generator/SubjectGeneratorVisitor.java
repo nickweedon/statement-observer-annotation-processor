@@ -139,7 +139,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         if(preprocessResult.isHasExtends()) {
             return Java9Parser.RULE_superclass;
         }
-        return Java9Parser.RULE_identifier;
+        return Java9Parser.RULE_classBody;
     }
 
 
@@ -204,9 +204,16 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     public Void visitImportDeclaration(Java9Parser.ImportDeclarationContext ctx) {
         Void result = super.visitImportDeclaration(ctx);
 
+/*
         if(insertImportAtRuleIdx == ctx.getRuleIndex() && ctx.getText().equals("import" + preprocessResult.getLastImportPackage() + ";")) {
             outputTemplate("\nimport <statementObservable>;");
         }
+*/
+        if(insertImportAtRuleIdx == ctx.getRuleIndex()
+                && getRightParseTreeArray(ctx, (childCtx) -> (childCtx instanceof Java9Parser.ImportDeclarationContext)).size() == 0) {
+            outputTemplate("\nimport <statementObservable>;");
+        }
+
 
         return result;
     }
@@ -227,6 +234,18 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
             }
         }
         return null;
+    }
+
+    @Override
+    public Void visitClassBody(Java9Parser.ClassBodyContext ctx) {
+
+        // Add the 'implements subject' code to the class
+        if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
+            outputTemplate(" implements <statementSubjectInterface>");
+            insertImplementsAtRuleIdx = 0;
+        }
+
+        return super.visitClassBody(ctx);
     }
 
     /**
@@ -250,20 +269,10 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
             generatedClassName = " " + originalClassName + "Subject";
             output(generatedClassName);
 
-            // Add the 'implements subject' code to the class
-            if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
-                // TODO: Make this work in all cases
-                outputTemplate(" implements <statementSubjectInterface>");
-                insertImplementsAtRuleIdx = 0;
-            }
-
             return null;
         }
 
-        Void result = super.visitIdentifier(ctx);
-
-
-        return result;
+        return super.visitIdentifier(ctx);
 
     }
 
@@ -322,6 +331,20 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         return super.visitStatementNoShortIf(ctx);
     }
 
+    @Override
+    public Void visitLambdaBody(Java9Parser.LambdaBodyContext ctx) {
+
+        // No special processing needed at this point if the lambda expresssion is already in a block
+        if(ctx.getChildCount() == 1 && ctx.getChild(0) instanceof Java9Parser.BlockContext) {
+            return super.visitLambdaBody(ctx);
+        }
+
+        return setRuleTransform(super::visitLambdaBody, ctx,
+                (token) -> lhsWhitespaceSplitTransform(token,
+                        (lhsWS, rhsToken) -> lhsWS + "{ tick(); " + rhsToken + "; }"));
+
+    }
+
     // Prefix the actual 'if' statement and the 'else' part of the if-then-else. Add enclosing block
     // when else statement is not a statement block.
     @Override
@@ -348,23 +371,35 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     }
 
     private List<ParseTree> getRightParseTreeArray(ParseTree ctx) {
+        return getRightParseTreeArray(ctx, (childCtx) -> true);
+    }
+
+    private List<ParseTree> getRightParseTreeArray(ParseTree ctx, Function<ParseTree, Boolean> filter) {
         List<ParseTree> parseTreeList = new ArrayList<>();
 
         final ParseTree parent = ctx.getParent();
 
         for(int i = parent.getChildCount() - 1; i >= 0 && parent.getChild(i) != ctx; --i) {
-            parseTreeList.add(parent.getChild(i));
+            if(filter.apply(parent.getChild(i))) {
+                parseTreeList.add(parent.getChild(i));
+            }
         }
         return Lists.reverse(parseTreeList);
     }
 
     private List<ParseTree> getLeftParseTreeArray(ParseTree ctx) {
+        return getLeftParseTreeArray(ctx, (childCtx) -> true);
+    }
+
+    private List<ParseTree> getLeftParseTreeArray(ParseTree ctx, Function<ParseTree, Boolean> filter) {
         List<ParseTree> parseTreeList = new ArrayList<>();
 
         final ParseTree parent = ctx.getParent();
 
         for(int i = 0; i < parent.getChildCount() && parent.getChild(i) != ctx; ++i) {
-            parseTreeList.add(parent.getChild(i));
+            if(filter.apply(parent.getChild(i))) {
+                parseTreeList.add(parent.getChild(i));
+            }
         }
         return  parseTreeList;
     }

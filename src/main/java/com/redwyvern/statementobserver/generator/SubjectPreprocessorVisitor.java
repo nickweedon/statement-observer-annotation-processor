@@ -57,10 +57,11 @@ public class SubjectPreprocessorVisitor  extends Java9ParserBaseVisitor<Void> {
         List<String> importList =
                 findAllOfPatternVariable(ctx, "import <typeName>;", Java9Parser.RULE_singleTypeImportDeclaration, "//importDeclaration/*", "typeName");
 
+        importList.addAll(
+                findAllOfPatternVariable(ctx, "import <packageOrTypeName>.*;", Java9Parser.RULE_typeImportOnDemandDeclaration, "//importDeclaration/*", "packageOrTypeName")
+        );
+
         result.setImports(new HashSet<>(importList));
-        if(!importList.isEmpty()) {
-            result.setLastImportPackage(importList.get(importList.size() - 1));
-        }
 
         return super.visitOrdinaryCompilation(ctx);
     }
