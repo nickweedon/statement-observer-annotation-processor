@@ -174,6 +174,27 @@ public class SubjectGeneratorVisitorTest {
         assertThat(generatedClass, startsWith(expectedGeneratedClass));
     }
 
+    @Test
+    public void shouldGenerateTickFromLamdaMultiline() throws IOException {
+
+
+        String generatedClass = executeSubjectGeneratorVisitor("javaclassinput/lambdaMultilineInput.java").trim();
+        String expectedGeneratedClass = ResourceUtil.getFileContents("subjectgenerator/SubjectLambdaMultilineTick.java").trim();
+
+        assertThat(generatedClass, startsWith(expectedGeneratedClass));
+    }
+
+    @Test
+    public void shouldGenerateTickFromMultiMethodInput() throws IOException {
+
+
+        String generatedClass = executeSubjectGeneratorVisitor("javaclassinput/multiLineMultiMethodInput.java").trim();
+        String expectedGeneratedClass = ResourceUtil.getFileContents("subjectgenerator/SubjectMultiLineMultiMethodInput.java").trim();
+
+
+        assertThat(generatedClass, startsWith(expectedGeneratedClass));
+    }
+
     //TODO: Implement more of the 'tick()' tests to finish fleshing out this functionality
 
 

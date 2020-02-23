@@ -2,11 +2,12 @@ package au.org.weedon.redblacktree;
 
 import java.util.*;
 import com.redwyvern.statementobserver.StatementObservable;
+import com.redwyvern.statementobserver.StatementSubject;
 
 @StatementObservable
-public class RBTree<V extends Comparable> {
+public class RBTreeSubject<V extends Comparable> {
 
-    public static class DFSNodeIterator<V> implements Iterator<RBNode<V>> {
+    public static class DFSNodeIterator<V> implements Iterator<RBNode<V>>, StatementSubject {
 
         public enum TraversalOrder {Preorder, Inorder, Postorder};
         private TraversalOrder traversalOrder;
@@ -14,32 +15,31 @@ public class RBTree<V extends Comparable> {
 
         @Override
         public RBNode<V> next() {
-            RBNode<V> returnedNode = queuedNode != null
+            tick(); RBNode<V> returnedNode = queuedNode != null
                     ? queuedNode
                     : getNextNode();
 
-            queuedNode = null;
+            tick(); queuedNode = null;
 
-            if(returnedNode == null) {
-                throw new RuntimeException("DFSNodeIterator next() called before calling hasNext()");
+            tick(); if(returnedNode == null) {
+                tick(); throw new RuntimeException("DFSNodeIterator next() called before calling hasNext()");
             }
 
-            return returnedNode;
+            tick(); return returnedNode;
         }
 
         public void add(V value) {
 
-            if(head.isNil()) {
-                head = nodeBuilder
+            tick(); if(head.isNil()) {
+                tick(); head = nodeBuilder
                             .setValue(value)
                             .build();
-                return;
+                tick(); return;
             }
 
-            addNode(head, nodeBuilder
+            tick(); addNode(head, nodeBuilder
                             .setValue(value)
                             .build());
         }
 
     }
-}

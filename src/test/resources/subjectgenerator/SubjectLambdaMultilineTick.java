@@ -10,5 +10,8 @@ public class RBTreeSubject<V extends Comparable> implements StatementSubject {
     private RBNode<V> head;
 
     public Iterable<RBNode<V>> iterateNodesDFS(DFSNodeIterator.TraversalOrder traversalOrder) {
-        tick(); return () -> { tick(); new DFSNodeIterator<>(head, traversalOrder); };
+        tick(); return () -> {
+            tick(); System.out.println("Hello world!");
+            tick(); return new DFSNodeIterator<>(head, traversalOrder);
+        };
     }

@@ -62,6 +62,8 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
     private int insertImportAtRuleIdx = 0;
     private int insertImplementsAtRuleIdx = 0;
 
+    private List<String> newImports = new ArrayList<>();
+
     private void output(String text) {
         try {
             outputStream.write(text.getBytes());
@@ -104,6 +106,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         outputTemplate.add("className", generatedClassName);
         outputTemplate.add("subjectHelper", SubjectHelper.class.getName());
         outputTemplate.add("statementObserver", StatementObserver.class.getName());
+        outputTemplate.add("statementSubjectInterfaceSimpleName", StatementSubject.class.getSimpleName());
         outputTemplate.add("statementSubjectInterface", StatementSubject.class.getName());
         outputTemplate.add("classFileCode", ClassFileCode.class.getName());
         outputTemplate.add("statementObservable", com.redwyvern.statementobserver.StatementObservable.class.getName());
@@ -112,8 +115,17 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
     // Determine if/where to add import statement
     private int calculateInsertImportRuleIdx() {
-        if(preprocessResult.getImports().contains(com.redwyvern.statementobserver.StatementObservable.class.getName())) {
-            // Don't add if it is already in the imports
+
+        newImports.addAll(Arrays.asList(
+            com.redwyvern.statementobserver.StatementObservable.class.getName(),
+            com.redwyvern.statementobserver.StatementSubject.class.getName()
+        ));
+
+
+        newImports.removeAll(preprocessResult.getImports());
+
+        if(newImports.isEmpty()) {
+            // Don't add if all imports are already in the imports
             return 0;
         }
 
@@ -183,7 +195,10 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         Void result = super.visitOrdinaryCompilation(ctx);
 
         if(insertImportAtRuleIdx == ctx.getRuleIndex()) {
-            outputTemplate("import <statementObservable>;");
+            output(String.format("import %s;", newImports.get(0)));
+            for(int i = 1; i < newImports.size(); ++i) {
+                output(String.format("\nimport %s;", newImports.get(i)));
+            }
         }
 
         return result;
@@ -194,7 +209,10 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         Void result = super.visitPackageDeclaration(ctx);
 
         if(insertImportAtRuleIdx == ctx.getRuleIndex()) {
-            outputTemplate("\n\nimport <statementObservable>;");
+            output("\n");
+            for (String newImport : newImports) {
+                output(String.format("\nimport %s;", newImport));
+            }
         }
 
         return result;
@@ -211,7 +229,10 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 */
         if(insertImportAtRuleIdx == ctx.getRuleIndex()
                 && getRightParseTreeArray(ctx, (childCtx) -> (childCtx instanceof Java9Parser.ImportDeclarationContext)).size() == 0) {
-            outputTemplate("\nimport <statementObservable>;");
+
+            for (String newImport : newImports) {
+                output(String.format("\nimport %s;", newImport));
+            }
         }
 
 
@@ -241,7 +262,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
         // Add the 'implements subject' code to the class
         if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
-            outputTemplate(" implements <statementSubjectInterface>");
+            outputTemplate(" implements <statementSubjectInterfaceSimpleName>");
             insertImplementsAtRuleIdx = 0;
         }
 
@@ -282,7 +303,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
         // Append the subject interface to the implements list
         if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
-            outputTemplate(", <statementSubjectInterface>");
+            outputTemplate(", <statementSubjectInterfaceSimpleName>");
             insertImplementsAtRuleIdx = 0;
         }
 
@@ -294,7 +315,7 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
         Void result = super.visitSuperclass(ctx);
         // Add the 'implements subject' code to the class but after the 'extends' clause
         if(ctx.getRuleIndex() == insertImplementsAtRuleIdx) {
-            outputTemplate(" implements <statementSubjectInterface>");
+            outputTemplate(" implements <statementSubjectInterfaceSimpleName>");
             insertImplementsAtRuleIdx = 0;
         }
 
@@ -345,26 +366,34 @@ public class SubjectGeneratorVisitor extends Java9ParserBaseVisitor<Void> {
 
     }
 
-    // Prefix the actual 'if' statement and the 'else' part of the if-then-else. Add enclosing block
-    // when else statement is not a statement block.
     @Override
     public Void visitStatement(Java9Parser.StatementContext ctx) {
+        return visitStatementType((context) -> super.visitStatement((Java9Parser.StatementContext)context), ctx);
+    }
 
+    @Override
+    public Void visitLocalVariableDeclarationStatement(Java9Parser.LocalVariableDeclarationStatementContext ctx) {
+        return visitStatementType((context) -> super.visitLocalVariableDeclarationStatement((Java9Parser.LocalVariableDeclarationStatementContext)context), ctx);
+    }
+
+    // Prefix the actual 'if' statement and the 'else' part of the if-then-else. Add enclosing block
+    // when else statement is not a statement block.
+    private Void visitStatementType(Function<ParserRuleContext, Void> superMethod, ParserRuleContext ctx) {
         // This prevents placing a 'tick()' in front of a statement block
         // For example we don't want: 'if (true) { stuff...} else tick() { stuff... }
         if(isStatementBlock(ctx)) {
-            return super.visitStatement(ctx);
+            return superMethod.apply(ctx);
         }
 
         // We need to enclose this single statement in block quotes to insert the tick()
         if(ctx.getParent().getRuleIndex() == Java9Parser.RULE_ifThenElseStatement) {
-            return setRuleTransform(super::visitStatement, ctx,
+            return setRuleTransform(superMethod, ctx,
                     (token) -> lhsWhitespaceSplitTransform(token,
                             (lhsWS, rhsToken) -> lhsWS + "{ tick(); " + rhsToken + " }"));
         }
 
         // Skip pre-pending tick if this is before the start of a block
-        return setRuleTransform(super::visitStatement, ctx,
+        return setRuleTransform(superMethod, ctx,
                 (token) -> lhsWhitespaceSplitTransform(token,
                         (lhsWS, rhsToken) -> lhsWS + "tick(); " + rhsToken));
 

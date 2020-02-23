@@ -9,6 +9,7 @@ public class RBTree<V extends Comparable> {
 
     public Iterable<RBNode<V>> iterateNodesDFS(DFSNodeIterator.TraversalOrder traversalOrder) {
         return () -> {
+            System.out.println("Hello world!");
             return new DFSNodeIterator<>(head, traversalOrder);
         };
     }
